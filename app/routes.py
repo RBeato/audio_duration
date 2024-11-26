@@ -144,19 +144,17 @@ def download_file(file_id):
             download_name=os.path.basename(trimmed_filepath)
         )
         
-        # Clean up after a delay
-        def delayed_cleanup():
-            time.sleep(5)  # Wait 5 seconds before cleanup
+        @response.call_on_close
+        def cleanup_after_send():
+            logger.debug("Starting cleanup after file send")
             cleanup_file(metadata['original'])
             cleanup_file(metadata['path'])
             cleanup_file(metadata_path)
             try:
                 os.rmdir(request_dir)
+                logger.debug(f"Cleaned up directory: {request_dir}")
             except Exception as e:
                 logger.error(f"Error removing directory: {str(e)}")
-            
-        # Start cleanup in a separate thread
-        threading.Thread(target=delayed_cleanup).start()
             
         return response
         
