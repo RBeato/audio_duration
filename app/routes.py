@@ -3,6 +3,11 @@ from flask import Blueprint, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from app.audio_processor import get_audio_duration, trim_audio
 from app.config import Config
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 main = Blueprint('main', __name__)
 
@@ -85,6 +90,8 @@ def trim_audio_endpoint():
 
         # Get duration parameter
         duration = request.form.get('duration')
+        logger.debug(f"Received duration: {duration}")
+        
         if not duration:
             return jsonify({'error': 'Duration parameter is required'}), 400
         
@@ -106,19 +113,30 @@ def trim_audio_endpoint():
 
         filename = secure_filename(file.filename)
         filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
+        logger.debug(f"Saving file to: {filepath}")
         
         # Ensure upload directory exists
         os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
         
         # Save file temporarily
         file.save(filepath)
+        logger.debug(f"File saved, size: {os.path.getsize(filepath)}")
         
         # Trim audio
         trimmed_filepath = trim_audio(filepath, duration)
+        logger.debug(f"Trimmed file created at: {trimmed_filepath}")
+        logger.debug(f"Trimmed file size: {os.path.getsize(trimmed_filepath)}")
         
         # Send the trimmed file
+        if not os.path.exists(trimmed_filepath):
+            raise Exception("Trimmed file was not created")
+            
+        if os.path.getsize(trimmed_filepath) == 0:
+            raise Exception("Trimmed file is empty")
+            
         response = send_file(
             trimmed_filepath,
+            mimetype='audio/mpeg',
             as_attachment=True,
             download_name=os.path.basename(trimmed_filepath)
         )
@@ -126,12 +144,14 @@ def trim_audio_endpoint():
         # Clean up files after sending response
         @response.call_on_close
         def cleanup():
+            logger.debug("Cleaning up files...")
             cleanup_file(filepath)
             cleanup_file(trimmed_filepath)
             
         return response
     
     except Exception as e:
+        logger.error(f"Error in trim_audio_endpoint: {str(e)}", exc_info=True)
         # Ensure cleanup happens even if there's an error
         if filepath:
             cleanup_file(filepath)
