@@ -5,6 +5,9 @@ from app.audio_processor import get_audio_duration, trim_audio
 from app.config import Config
 import logging
 import uuid
+import datetime
+import time
+import threading
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -23,6 +26,7 @@ def cleanup_file(filepath):
     try:
         if os.path.exists(filepath):
             os.remove(filepath)
+            logger.debug(f"Cleaned up file: {filepath}")
     except Exception as e:
         logger.error(f"Error cleaning up file {filepath}: {str(e)}")
 
@@ -60,12 +64,13 @@ def trim_audio_endpoint():
         # Generate unique ID for this file
         file_id = str(uuid.uuid4())
         
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
-        logger.debug(f"Saving file to: {filepath}")
+        # Create a directory for this specific request
+        request_dir = os.path.join(Config.UPLOAD_FOLDER, file_id)
+        os.makedirs(request_dir, exist_ok=True)
         
-        # Ensure upload directory exists
-        os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(request_dir, filename)
+        logger.debug(f"Saving file to: {filepath}")
         
         # Save file temporarily
         file.save(filepath)
@@ -79,7 +84,8 @@ def trim_audio_endpoint():
         # Store the trimmed file path with its ID
         TEMP_FILES[file_id] = {
             'path': trimmed_filepath,
-            'original': filepath
+            'original': filepath,
+            'created_at': datetime.datetime.now()
         }
         
         # Generate download URL
@@ -94,7 +100,6 @@ def trim_audio_endpoint():
         
     except Exception as e:
         logger.error(f"Error in trim_audio_endpoint: {str(e)}", exc_info=True)
-        # Ensure cleanup happens if there's an error
         if filepath:
             cleanup_file(filepath)
         if trimmed_filepath:
@@ -104,13 +109,20 @@ def trim_audio_endpoint():
 @main.route('/download/<file_id>', methods=['GET'])
 def download_file(file_id):
     try:
+        logger.debug(f"Download requested for file_id: {file_id}")
+        logger.debug(f"Available files: {TEMP_FILES}")
+        
         if file_id not in TEMP_FILES:
+            logger.error(f"File ID {file_id} not found in TEMP_FILES")
             return jsonify({'error': 'File not found'}), 404
             
         file_info = TEMP_FILES[file_id]
         trimmed_filepath = file_info['path']
         
+        logger.debug(f"Attempting to send file: {trimmed_filepath}")
+        
         if not os.path.exists(trimmed_filepath):
+            logger.error(f"File does not exist at path: {trimmed_filepath}")
             return jsonify({'error': 'File no longer exists'}), 404
             
         response = send_file(
@@ -120,13 +132,15 @@ def download_file(file_id):
             download_name=os.path.basename(trimmed_filepath)
         )
         
-        # Clean up after sending
-        @response.call_on_close
-        def cleanup():
-            logger.debug("Cleaning up files...")
+        # Clean up after a delay to ensure file is sent
+        def delayed_cleanup():
+            time.sleep(5)  # Wait 5 seconds before cleanup
             cleanup_file(file_info['original'])
             cleanup_file(file_info['path'])
             TEMP_FILES.pop(file_id, None)
+            
+        # Start cleanup in a separate thread
+        threading.Thread(target=delayed_cleanup).start()
             
         return response
         
