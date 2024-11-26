@@ -1,6 +1,7 @@
 from mutagen.mp3 import MP3
 from mutagen.wave import WAVE
 from pydub import AudioSegment
+import os
 
 def get_audio_duration(filepath):
     """
@@ -23,22 +24,42 @@ def trim_audio(input_path, duration_seconds):
     Returns: path to trimmed file
     """
     try:
-        # Load audio file
-        audio = AudioSegment.from_file(input_path)
+        # Get file extension
+        extension = input_path.lower().split('.')[-1]
+        
+        # Load audio file with explicit format
+        if extension == 'mp3':
+            audio = AudioSegment.from_mp3(input_path)
+        elif extension == 'wav':
+            audio = AudioSegment.from_wav(input_path)
+        else:
+            raise ValueError("Unsupported file format")
         
         # Convert duration to milliseconds
-        duration_ms = duration_seconds * 1000
+        duration_ms = int(duration_seconds * 1000)
         
         # Trim audio
         trimmed_audio = audio[:duration_ms]
         
-        # Generate output filename
-        filename = input_path.rsplit('.', 1)[0]
-        extension = input_path.rsplit('.', 1)[1]
-        output_path = f"{filename}_trimmed.{extension}"
+        # Generate output filename in the same directory as input
+        output_path = os.path.join(
+            os.path.dirname(input_path),
+            f"trimmed_{os.path.basename(input_path)}"
+        )
         
-        # Export trimmed audio
-        trimmed_audio.export(output_path, format=extension)
+        # Export with specific parameters
+        if extension == 'mp3':
+            trimmed_audio.export(
+                output_path,
+                format='mp3',
+                bitrate='320k',
+                parameters=["-q:a", "0"]  # Use highest quality
+            )
+        else:  # wav
+            trimmed_audio.export(
+                output_path,
+                format='wav'
+            )
         
         return output_path
         
