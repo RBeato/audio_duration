@@ -1,5 +1,5 @@
 import os
-from flask import Blueprint, request, jsonify, send_file, url_for
+from flask import Blueprint, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from app.audio_processor import get_audio_duration, trim_audio
 from app.config import Config
@@ -8,15 +8,13 @@ import uuid
 import datetime
 import time
 import threading
+import json
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 main = Blueprint('main', __name__)
-
-# Store temporary files with their IDs
-TEMP_FILES = {}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'mp3', 'wav'}
@@ -81,17 +79,20 @@ def trim_audio_endpoint():
         logger.debug(f"Trimmed file created at: {trimmed_filepath}")
         logger.debug(f"Trimmed file size: {os.path.getsize(trimmed_filepath)}")
         
-        # Store the trimmed file path with its ID
-        TEMP_FILES[file_id] = {
+        # Create a metadata file
+        metadata = {
             'path': trimmed_filepath,
             'original': filepath,
-            'created_at': datetime.datetime.now()
+            'created_at': str(datetime.datetime.now())
         }
+        
+        metadata_path = os.path.join(request_dir, 'metadata.json')
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f)
         
         # Generate download URL
         download_url = f"http://164.90.165.124:5001/download/{file_id}"
         
-        # Return the download link
         return jsonify({
             'message': 'Audio trimmed successfully',
             'download_url': download_url,
@@ -110,39 +111,60 @@ def trim_audio_endpoint():
 def download_file(file_id):
     try:
         logger.debug(f"Download requested for file_id: {file_id}")
-        logger.debug(f"Available files: {TEMP_FILES}")
         
-        if file_id not in TEMP_FILES:
-            logger.error(f"File ID {file_id} not found in TEMP_FILES")
+        # Check if the directory exists
+        request_dir = os.path.join(Config.UPLOAD_FOLDER, file_id)
+        metadata_path = os.path.join(request_dir, 'metadata.json')
+        
+        if not os.path.exists(metadata_path):
+            logger.error(f"Metadata file not found for ID: {file_id}")
             return jsonify({'error': 'File not found'}), 404
             
-        file_info = TEMP_FILES[file_id]
-        trimmed_filepath = file_info['path']
-        
+        # Load metadata
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+            
+        trimmed_filepath = metadata['path']
         logger.debug(f"Attempting to send file: {trimmed_filepath}")
         
         if not os.path.exists(trimmed_filepath):
             logger.error(f"File does not exist at path: {trimmed_filepath}")
             return jsonify({'error': 'File no longer exists'}), 404
             
-        response = send_file(
-            trimmed_filepath,
-            mimetype='audio/mpeg',
-            as_attachment=True,
-            download_name=os.path.basename(trimmed_filepath)
-        )
-        
-        # Clean up after a delay to ensure file is sent
-        def delayed_cleanup():
-            time.sleep(5)  # Wait 5 seconds before cleanup
-            cleanup_file(file_info['original'])
-            cleanup_file(file_info['path'])
-            TEMP_FILES.pop(file_id, None)
+        try:
+            response = send_file(
+                trimmed_filepath,
+                mimetype='audio/mpeg',
+                as_attachment=True,
+                download_name=os.path.basename(trimmed_filepath)
+            )
             
-        # Start cleanup in a separate thread
-        threading.Thread(target=delayed_cleanup).start()
+            # Clean up after a shorter delay
+            def delayed_cleanup():
+                time.sleep(1)  # Reduced from 5 seconds to 1 second
+                cleanup_file(metadata['original'])
+                cleanup_file(metadata['path'])
+                cleanup_file(metadata_path)
+                try:
+                    os.rmdir(request_dir)
+                except Exception as e:
+                    logger.error(f"Error removing directory: {str(e)}")
+                
+            # Start cleanup in a separate thread
+            threading.Thread(target=delayed_cleanup, daemon=True).start()
+                
+            return response
             
-        return response
+        except Exception as e:
+            # If sending fails, clean up immediately
+            cleanup_file(metadata['original'])
+            cleanup_file(metadata['path'])
+            cleanup_file(metadata_path)
+            try:
+                os.rmdir(request_dir)
+            except Exception as cleanup_error:
+                logger.error(f"Error removing directory: {str(cleanup_error)}")
+            raise
         
     except Exception as e:
         logger.error(f"Error in download_file: {str(e)}", exc_info=True)
