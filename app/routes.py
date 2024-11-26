@@ -90,8 +90,6 @@ def trim_audio_endpoint():
 
         # Get duration parameter
         duration = request.form.get('duration')
-        logger.debug(f"Received duration: {duration}")
-        
         if not duration:
             return jsonify({'error': 'Duration parameter is required'}), 400
         
@@ -151,7 +149,6 @@ def trim_audio_endpoint():
         return response
     
     except Exception as e:
-        logger.error(f"Error in trim_audio_endpoint: {str(e)}", exc_info=True)
         # Ensure cleanup happens even if there's an error
         if filepath:
             cleanup_file(filepath)
