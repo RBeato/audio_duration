@@ -28,7 +28,18 @@ def trim_audio(input_path, duration_seconds):
     """
     try:
         logger.debug(f"Starting trim_audio with input: {input_path}, duration: {duration_seconds}")
-        logger.debug(f"Input file size: {os.path.getsize(input_path)}")
+        
+        # Check if input file exists and is readable
+        if not os.path.exists(input_path):
+            raise FileNotFoundError(f"Input file does not exist: {input_path}")
+        
+        logger.debug(f"Input file exists and size is: {os.path.getsize(input_path)} bytes")
+        logger.debug(f"Input file permissions: {oct(os.stat(input_path).st_mode)[-3:]}")
+        
+        # Check if output directory is writable
+        output_dir = os.path.dirname(input_path)
+        if not os.access(output_dir, os.W_OK):
+            raise PermissionError(f"Output directory is not writable: {output_dir}")
         
         # Get file extension
         extension = input_path.lower().split('.')[-1]
