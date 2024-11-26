@@ -6,6 +6,7 @@ After=network.target
 User=root
 WorkingDirectory=/opt/audio_duration
 Environment="PATH=/opt/audio_duration/venv/bin"
+Environment="API_KEY=410850697a62310eae3996723aeff023d04d14a6d739ee3aad84c4048e1fa454"
 ExecStart=/opt/audio_duration/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:5001 run:app
 Restart=always
 
