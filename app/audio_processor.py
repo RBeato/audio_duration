@@ -2,6 +2,9 @@ from mutagen.mp3 import MP3
 from mutagen.wave import WAVE
 from pydub import AudioSegment
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_audio_duration(filepath):
     """
@@ -24,44 +27,60 @@ def trim_audio(input_path, duration_seconds):
     Returns: path to trimmed file
     """
     try:
+        logger.debug(f"Starting trim_audio with input: {input_path}, duration: {duration_seconds}")
+        logger.debug(f"Input file size: {os.path.getsize(input_path)}")
+        
         # Get file extension
         extension = input_path.lower().split('.')[-1]
+        logger.debug(f"File extension: {extension}")
         
         # Load audio file with explicit format
         if extension == 'mp3':
+            logger.debug("Loading MP3 file...")
             audio = AudioSegment.from_mp3(input_path)
         elif extension == 'wav':
+            logger.debug("Loading WAV file...")
             audio = AudioSegment.from_wav(input_path)
         else:
             raise ValueError("Unsupported file format")
         
+        logger.debug(f"Audio loaded, duration: {len(audio)}ms")
+        
         # Convert duration to milliseconds
         duration_ms = int(duration_seconds * 1000)
+        logger.debug(f"Target duration: {duration_ms}ms")
         
         # Trim audio
         trimmed_audio = audio[:duration_ms]
+        logger.debug(f"Audio trimmed, new duration: {len(trimmed_audio)}ms")
         
         # Generate output filename in the same directory as input
         output_path = os.path.join(
             os.path.dirname(input_path),
             f"trimmed_{os.path.basename(input_path)}"
         )
+        logger.debug(f"Output path: {output_path}")
         
         # Export with specific parameters
         if extension == 'mp3':
+            logger.debug("Exporting as MP3...")
             trimmed_audio.export(
                 output_path,
                 format='mp3',
                 bitrate='320k',
+                codec="libmp3lame",
                 parameters=["-q:a", "0"]  # Use highest quality
             )
         else:  # wav
+            logger.debug("Exporting as WAV...")
             trimmed_audio.export(
                 output_path,
                 format='wav'
             )
         
+        logger.debug(f"Export complete. File size: {os.path.getsize(output_path)}")
         return output_path
         
     except Exception as e:
+        logger.error(f"Error in trim_audio: {str(e)}", exc_info=True)
         raise Exception(f"Error trimming audio: {str(e)}") 
