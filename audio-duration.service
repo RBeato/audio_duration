@@ -1,0 +1,13 @@
+[Unit]
+Description=Audio Duration Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/audio_duration
+Environment="PATH=/opt/audio_duration/venv/bin"
+ExecStart=/opt/audio_duration/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:5001 run:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target 
