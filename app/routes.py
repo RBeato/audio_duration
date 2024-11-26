@@ -23,8 +23,15 @@ def process_audio():
     try:
         # Check API key
         api_key = request.headers.get('X-API-KEY')
+        print(f"Received API key: {api_key}")
+        print(f"Expected API key: {Config.API_KEY}")
+        
         if api_key != Config.API_KEY:
-            return jsonify({'error': 'Invalid API key'}), 401
+            return jsonify({
+                'error': 'Invalid API key',
+                'received': api_key,
+                'expected': Config.API_KEY
+            }), 401
 
         # Check if file was uploaded
         if 'audio' not in request.files:
