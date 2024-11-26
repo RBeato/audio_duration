@@ -136,8 +136,15 @@ def trim_audio_endpoint():
             trimmed_filepath,
             mimetype='audio/mpeg',
             as_attachment=True,
-            download_name=os.path.basename(trimmed_filepath)
+            download_name=os.path.basename(trimmed_filepath),
+            conditional=True  # Add support for range requests
         )
+        
+        # Add headers to prevent caching
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Content-Length'] = str(os.path.getsize(trimmed_filepath))
         
         # Clean up files after sending response
         @response.call_on_close
@@ -149,6 +156,7 @@ def trim_audio_endpoint():
         return response
     
     except Exception as e:
+        logger.error(f"Error in trim_audio_endpoint: {str(e)}", exc_info=True)
         # Ensure cleanup happens even if there's an error
         if filepath:
             cleanup_file(filepath)
