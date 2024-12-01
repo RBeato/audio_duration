@@ -96,8 +96,10 @@ def trim_audio_endpoint():
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f)
         
-        # Generate download URL
-        download_url = f"http://164.90.165.124:5001/download/{file_id}"
+        # Generate download URL dynamically
+        host = request.headers.get('Host', request.host)
+        scheme = request.headers.get('X-Forwarded-Proto', request.scheme)
+        download_url = f"{scheme}://{host}/download/{file_id}"
         
         return jsonify({
             'message': 'Audio trimmed successfully',
